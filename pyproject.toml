@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "case-forge"
+version = "1.0.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn>=0.30",
+    "boto3>=1.34",
+    "pydantic-settings>=2.3",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+firestore = ["google-cloud-firestore>=2.16"]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "httpx>=0.27",
+    "moto[dynamodb]>=5.0",
+    "ruff>=0.4",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# The same rule set as the other 26 projects. It was absent here, so case-forge was the only
+# project linting against ruff's bare defaults -- which is how 30 findings accumulated
+# unnoticed alongside the missing CI.
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's whole dependency-injection design puts these calls in argument defaults, so B008
+# fires on idiomatic framework usage. Extending the immutable-call list is the documented
+# remedy and is narrower than ignoring B008 everywhere.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.File",
+    "fastapi.Form",
+    "fastapi.Query",
+    "fastapi.UploadFile",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/case_forge"]

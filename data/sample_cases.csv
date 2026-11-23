@@ -1,0 +1,6 @@
+product_id,category,marketplace,description,source,shipped_units,unit_price,shipping_charge,gift_wrap_charge,price_discount,shipping_discount,gift_wrap_discount
+SKU-90001,Toys & Games,"US,CA",Missing age grading documentation for building blocks set,automated_scan,150,12.99,0,0,0,0,0
+SKU-90002,Electronics,US,Charger does not have UL certification listed,customer_report,500,29.99,2500,0,-1200,0,0
+SKU-90003,Beauty & Personal Care,"US,DE,FR",Product claims not substantiated by documentation,escalation,80,45.00,200,0,-100,0,0
+SKU-90004,Baby Products,"US,UK",Car seat missing CPSIA compliance certificate,manual,20,199.99,0,0,0,0,0
+SKU-90005,Grocery & Gourmet Food,"US,JP",Allergen information not displayed in local language,automated_scan,2000,8.99,3000,0,-500,-200,0

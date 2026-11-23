@@ -1,0 +1,107 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check src tests
+
+      - name: Test
+        run: pytest -q --cov=case_forge --cov-report=term-missing
+
+      - name: The package imports without any cloud credentials present
+        run: |
+          # `pip install` succeeding is not the same as the package working. The DynamoDB
+          # client is built per-instance in __init__, so importing must need no credentials.
+          # Unsetting the env vars alone is not enough -- boto3 also reads ~/.aws/credentials
+          # and, failing that, the EC2 metadata endpoint, which on a runner with no network
+          # route is a HANG rather than an error. Point both at nothing and disable metadata.
+          env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_PROFILE \
+              -u AWS_DEFAULT_REGION \
+              AWS_SHARED_CREDENTIALS_FILE=/nonexistent \
+              AWS_CONFIG_FILE=/nonexistent \
+              AWS_EC2_METADATA_DISABLED=true \
+            python -c "
+          import case_forge.api
+          import case_forge.models
+          from case_forge.config import Settings
+          from case_forge.database import get_database
+
+          # The registry must name its options rather than failing opaquely.
+          try:
+              get_database('nonsense')
+              raise AssertionError('an unknown backend should not resolve')
+          except ValueError as error:
+              assert 'Available:' in str(error), error
+          print('  imports clean with no credentials')
+          "
+
+      - name: Admin resolution is driven by the property auth actually reads
+        run: |
+          python - <<'PY'
+          from case_forge.config import Settings
+
+          # THE DEFECT THIS GUARDS: three tests patched `admin_users` (a comma-separated
+          # STRING) with a list, while `auth.py` reads the `admin_list` PROPERTY. On a
+          # MagicMock the property returns a MagicMock, so every admin assertion silently
+          # evaluated False. With no CI, nothing said so.
+          assert Settings(admin_users="admin", _env_file=None).admin_list == ["admin"]
+          assert Settings(admin_users="a, b ,c", _env_file=None).admin_list == ["a", "b", "c"]
+          assert Settings(admin_users="a,,", _env_file=None).admin_list == ["a"]
+          assert Settings(admin_users="", _env_file=None).admin_list == []
+
+          # `Settings()` is NOT hermetic -- it reads CF_* from the environment and .env -- so
+          # a test asserting on "the default" has to disable both or it asserts on the machine.
+          import os
+          os.environ["CF_ADMIN_USERS"] = "from-the-environment"
+          assert Settings(_env_file=None).admin_list == ["from-the-environment"]
+          del os.environ["CF_ADMIN_USERS"]
+          assert Settings(_env_file=None).admin_list == ["admin"]
+          print("  admin_list parses the string auth.py depends on")
+          PY
+
+      - name: Status is a StrEnum, so it serialises as its own value
+        run: |
+          python - <<'PY'
+          from case_forge.models import Status
+
+          # Changed from `class Status(str, Enum)` to StrEnum for UP042. Behaviour must be
+          # identical for comparison and JSON, which is the whole reason the change is safe.
+          import json
+
+          assert Status.NEW == "NEW"
+          assert json.dumps({"s": Status.RESOLVED}) == '{"s": "RESOLVED"}'
+
+          # Pinned so a reorder or a removal is visible. REOPENED is the seventh and the one
+          # a case-management state machine most needs -- it was missed on a first reading of
+          # the file, which is why the count is asserted alongside the list.
+          assert [s.value for s in Status] == [
+              "NEW", "IN_PROGRESS", "UNDER_REVIEW", "RESOLVED", "ESCALATED", "CLOSED",
+              "REOPENED",
+          ]
+          assert len(list(Status)) == 7
+
+          # And every member individually, so the list above cannot pass vacuously.
+          for member in Status:
+              assert member == member.value
+              assert json.loads(json.dumps({"s": member}))["s"] == member.value
+          print("  StrEnum behaves as the old (str, Enum) pair did, for all 7 members")
+          PY

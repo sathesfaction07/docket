@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CaseForge</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        darkMode: 'class',
+        theme: {
+            extend: {
+                colors: {
+                    surface: { DEFAULT: '#0a0e1a', raised: 'rgba(255,255,255,0.03)' },
+                    accent: { DEFAULT: '#00d4aa', dim: 'rgba(0,212,170,0.15)' },
+                    gold: { DEFAULT: '#f59e0b', dim: 'rgba(245,158,11,0.12)' },
+                },
+                fontFamily: { sans: ['Inter', 'system-ui'], mono: ['JetBrains Mono', 'monospace'] },
+            }
+        }
+    }
+    </script>
+    <style>
+        body { background: #0a0e1a; }
+        .card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; }
+        .card:hover { border-color: rgba(0,212,170,0.15); }
+        .glow { box-shadow: 0 0 0 1px rgba(0,212,170,0.12), 0 0 20px -5px rgba(0,212,170,0.1); }
+        .nav-blur { backdrop-filter: blur(12px); background: rgba(10,14,26,0.85); }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        .status-new { background: rgba(99,102,241,0.12); color: #818cf8; }
+        .status-in_progress { background: rgba(0,212,170,0.12); color: #00d4aa; }
+        .status-under_review { background: rgba(245,158,11,0.12); color: #f59e0b; }
+        .status-resolved { background: rgba(34,197,94,0.12); color: #22c55e; }
+        .status-escalated { background: rgba(239,68,68,0.12); color: #f87171; }
+        .status-closed { background: rgba(107,114,128,0.12); color: #9ca3af; }
+        .status-reopened { background: rgba(168,85,247,0.12); color: #a855f7; }
+        .high-value { border-left: 3px solid #f59e0b; }
+        input, textarea, select {
+            background: #111827 !important;
+            border: 1px solid #1f2937 !important;
+            color: #e5e7eb !important;
+            border-radius: 12px;
+            padding: 10px 14px;
+            font-size: 13px;
+            outline: none;
+        }
+        input:focus, textarea:focus, select:focus {
+            border-color: rgba(0,212,170,0.5) !important;
+            box-shadow: 0 0 0 2px rgba(0,212,170,0.1);
+        }
+        input::placeholder, textarea::placeholder { color: #4b5563 !important; }
+        select option { background: #111827; color: #e5e7eb; }
+
+        /* live connection */
+        .live-dot { width: 7px; height: 7px; border-radius: 9999px; display: inline-block; background: #4b5563; }
+        .live-live { background: #22c55e; box-shadow: 0 0 0 0 rgba(34,197,94,0.6); animation: pulse 2s infinite; }
+        .live-reconnecting, .live-connecting { background: #f59e0b; }
+        .live-unauthorized { background: #ef4444; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); } 70% { box-shadow: 0 0 0 6px rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
+        .presence-chip { display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 9999px; background: rgba(0,212,170,0.1); color: #00d4aa; font-family: 'JetBrains Mono', monospace; }
+
+        /* someone else changed this row */
+        .flash { animation: flash 1.6s ease-out; }
+        @keyframes flash { 0% { background: rgba(0,212,170,0.18); border-color: rgba(0,212,170,0.5); } 100% { background: rgba(255,255,255,0.03); } }
+
+        .toasts { position: fixed; right: 16px; bottom: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; max-width: min(360px, calc(100vw - 32px)); }
+        .toast { background: #111827; border: 1px solid rgba(0,212,170,0.25); color: #e5e7eb; font-size: 12px; padding: 10px 14px; border-radius: 12px; box-shadow: 0 8px 24px -8px rgba(0,0,0,0.6); }
+
+        .banner { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12px; padding: 10px 14px; border-radius: 12px; }
+        .banner-info { background: rgba(0,212,170,0.08); border: 1px solid rgba(0,212,170,0.25); color: #99f6e4; }
+        .banner-warn { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.3); color: #fcd34d; }
+        .banner-error { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5; }
+
+        .btn-primary { background: #00d4aa; color: #0a0e1a; font-weight: 600; font-size: 12px; padding: 8px 14px; border-radius: 10px; }
+        .btn-primary:disabled { opacity: 0.4; }
+        .btn-ghost { color: #94a3b8; font-size: 12px; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,0.04); }
+        .btn-ghost:hover { color: #e5e7eb; }
+    </style>
+</head>
+<body class="text-slate-100 min-h-screen antialiased">
+    <div id="root"></div>
+    <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+    <script type="text/babel" src="src/App.jsx"></script>
+</body>
+</html>
