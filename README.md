@@ -92,7 +92,46 @@ The UI pins an edit to the version it **started** from, not the version on scree
 └───────────────────────┘  └───────────────────────┘  └──────────────┘
 ```
 
-The change feed lives in the API process. Running more than one API instance needs a shared feed (DynamoDB Streams, Firestore listeners or Redis pub/sub) behind the same `publish`/`subscribe` interface; see ARCHITECTURE.md. The version checks do not have that limit: they are enforced by the database, so they hold across any number of instances.
+CaseForge runs as **one API server** today. The design already allows more; see [Scaling to more than one server](#scaling-to-more-than-one-server).
+
+---
+
+## Scaling to more than one server
+
+CaseForge is deliberately single-server today: one API process, one change feed. This section
+is the plan for when one server is not enough, so the move is a known piece of work rather
+than a redesign.
+
+**What already works across servers.** Concurrency control. Every write is conditional on the
+case version, and the *database* enforces it (a DynamoDB `ConditionExpression`, a Firestore
+transaction). Two servers writing the same case cannot lose an update. No change is needed.
+
+**What does not.** The live feed. Each server pushes only the changes made *through it*, so a
+browser connected to server A never hears about a write that went through server B until it
+reloads. Presence ("also here: bob") and `Last-Event-ID` replay are per server for the same
+reason. Data stays correct; only the live view would be incomplete.
+
+**The change.** Put a shared feed behind the existing `ChangeFeed.publish` / `subscribe`
+interface in `events.py`, so the API code does not change:
+
+| Option | How it works | Fits when |
+|:--|:--|:--|
+| **Redis** (recommended first step) | Every server publishes to and subscribes from one Redis channel. Move the replay buffer to a Redis Stream (`XADD` with a max length, `XRANGE` after the client's id), so `Last-Event-ID` replay works whichever server a client reconnects to. Keep presence in a Redis set with expiring members. | Any backend. One small managed Redis covers it. |
+| **DynamoDB Streams** | A stream consumer (Lambda or a poller) turns each item change into an event and fans it out, through Redis or SNS, to every server. The stream's new image is already the `case` payload. | You are on DynamoDB and want the database to be the only source of events, including writes made outside the API. |
+| **Firestore listeners** | Each server runs `on_snapshot` on the collection and publishes what it sees to its own clients. | You are on Firestore. No extra infrastructure; each listener costs reads. |
+
+**Deployment details that bite.**
+- Load balancers must not buffer `text/event-stream` responses. The API already sends
+  `X-Accel-Buffering: no` for nginx; check the idle timeout is above the 15-second heartbeat.
+- Sticky sessions are not needed once replay comes from the shared stream. Until then they
+  limit the damage, because a reconnecting client usually lands on the server that has its gap.
+- Event ids must come from the shared stream, not from a per-server counter, or replay ids from
+  different servers collide. The current `<epoch>:<seq>` format would become the Redis Stream id.
+
+**How to verify it.** Run two API processes behind a local proxy, point one browser at each,
+and repeat the two-window demo: a change made through either server must appear in both
+windows. `tests/unit/test_events.py` covers the replay and resync rules; the same tests should
+run against the Redis-backed feed.
 
 ---
 
