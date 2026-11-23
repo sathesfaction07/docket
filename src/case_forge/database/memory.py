@@ -1,4 +1,4 @@
-"""In-process backend: no cloud account needed to run, demo, or test CaseForge.
+"""In-process backend: no cloud account needed to run, demo, or test Docket.
 
 It implements the same contract as the DynamoDB and Firestore backends, including the
 optimistic-concurrency rule (every write is conditional on the version the caller read), so

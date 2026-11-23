@@ -1,8 +1,8 @@
-# CaseForge — Technical Architecture
+# Docket — Technical Architecture
 
 ## Overview
 
-CaseForge is a case lifecycle management system for compliance operations. It tracks products through investigation states (NEW → IN_PROGRESS → UNDER_REVIEW → RESOLVED/ESCALATED/CLOSED), computes Trailing 4-Week GMS to automatically flag high-value listings ($1,000+ threshold), enforces role-based access control (admin vs user ownership), and provides pluggable storage backends (DynamoDB or Firestore) switchable at runtime via environment variable.
+Docket is a case lifecycle management system for compliance operations. It tracks products through investigation states (NEW → IN_PROGRESS → UNDER_REVIEW → RESOLVED/ESCALATED/CLOSED), computes Trailing 4-Week GMS to automatically flag high-value listings ($1,000+ threshold), enforces role-based access control (admin vs user ownership), and provides pluggable storage backends (DynamoDB or Firestore) switchable at runtime via environment variable.
 
 **Design principle:** Ownership-first access control. Users own cases by default (assignee = the user identified by the request's bearer token), admins bypass ownership checks, and the storage layer is an abstraction — switching clouds costs one environment variable.
 
@@ -85,7 +85,7 @@ CaseForge is a case lifecycle management system for compliance operations. It tr
               ▼                                 ▼
 ┌─────────────────────────────┐   ┌─────────────────────────────┐
 │   AWS DynamoDB               │   │   Google Firestore           │
-│   Table: CaseForge           │   │   Collection: cases          │
+│   Table: Docket           │   │   Collection: cases          │
 │   PK: case_id                │   │   Doc ID: case_id            │
 │   Scan + FilterExpression    │   │   Composite indexes          │
 │   No GSIs implemented        │   │   Writes in a transaction    │
@@ -400,7 +400,7 @@ class Settings(BaseSettings):
 
     database_backend: str = "dynamodb"  # "dynamodb" | "firestore"
     aws_region: str = "us-east-1"
-    dynamodb_table: str = "CaseForge"
+    dynamodb_table: str = "Docket"
     gcp_project: str = ""
     firestore_collection: str = "cases"
 
@@ -431,7 +431,7 @@ pip install -e ".[dev]"
 # DynamoDB backend (default, requires AWS credentials configured)
 CF_DATABASE_BACKEND=dynamodb \
 CF_AWS_REGION=us-east-1 \
-CF_DYNAMODB_TABLE=CaseForge \
+CF_DYNAMODB_TABLE=Docket \
 CF_ADMIN_USERS=admin,alice \
 uvicorn case_forge.api:app --port 8000 --reload
 

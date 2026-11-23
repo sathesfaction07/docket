@@ -131,7 +131,7 @@ function SignIn({ onCancel }) {
     }
     return (
         <div className="max-w-sm mx-auto mt-32 card glow p-6 space-y-4 fade-in">
-            <h1 className="text-accent font-semibold tracking-wide">CaseForge</h1>
+            <h1 className="text-accent font-semibold tracking-wide">Docket</h1>
             <p className="text-xs text-slate-400">Enter your API token. It identifies you on every request and is kept in this browser tab.</p>
             <form onSubmit={submit} className="space-y-3">
                 <input type="password" autoFocus className="w-full" placeholder="API token" aria-label="API token" value={token} onChange={e => setToken(e.target.value)} />
@@ -281,7 +281,7 @@ function Workspace({ onSwitchUser }) {
             <nav className="fixed top-0 left-0 right-0 z-50 nav-blur border-b border-white/5">
                 <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                        <span className="text-accent font-semibold text-sm tracking-wide">CaseForge</span>
+                        <span className="text-accent font-semibold text-sm tracking-wide">Docket</span>
                         {me && <button onClick={onSwitchUser} title="Use a different token in this tab" className="text-[10px] font-mono text-slate-500 bg-white/5 px-2 py-0.5 rounded hover:text-slate-300">{me.user} ({me.role})</button>}
                         <span className={`live-dot live-${status}`} title={liveLabel}></span>
                         <span className="text-[10px] text-slate-500">{liveLabel}</span>

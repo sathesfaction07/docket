@@ -37,7 +37,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("case_forge")
 
-app = FastAPI(title="CaseForge API")
+app = FastAPI(title="Docket API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,

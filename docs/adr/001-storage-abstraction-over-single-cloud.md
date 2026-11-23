@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-CaseForge needs to persist cases, query them by status and assignee, and produce dashboard aggregates. The obvious move is to pick a managed NoSQL store and write directly against its SDK.
+Docket needs to persist cases, query them by status and assignee, and produce dashboard aggregates. The obvious move is to pick a managed NoSQL store and write directly against its SDK.
 
 Two candidates were on the table, and the choice was not clean:
 

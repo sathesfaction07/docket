@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "case-forge"
+name = "docket"
 version = "1.0.0"
 requires-python = ">=3.11"
 dependencies = [
@@ -34,7 +34,7 @@ target-version = "py311"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-# The same rule set as the other 26 projects. It was absent here, so case-forge was the only
+# The same rule set as the other 26 projects. It was absent here, so docket was the only
 # project linting against ruff's bare defaults -- which is how 30 findings accumulated
 # unnoticed alongside the missing CI.
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]

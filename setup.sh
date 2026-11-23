@@ -2,13 +2,13 @@
 set -e
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CaseForge Setup Script
+# Docket Setup Script
 # Detects OS, creates/reuses virtual environment, installs dependencies,
 # optionally provisions cloud resources (AWS DynamoDB or Google Firestore),
 # and starts the application.
 # ─────────────────────────────────────────────────────────────────────────────
 
-APP_NAME="case-forge"
+APP_NAME="docket"
 VENV_DIR=".venv"
 PYTHON_MIN="3.11"
 
@@ -109,9 +109,9 @@ setup_aws() {
     echo ""
     echo "Creating IAM role and DynamoDB table..."
 
-    ROLE_NAME="CaseForge-AppRole"
-    TABLE_NAME="CaseForge"
-    POLICY_NAME="CaseForge-DynamoDBAccess"
+    ROLE_NAME="Docket-AppRole"
+    TABLE_NAME="Docket"
+    POLICY_NAME="Docket-DynamoDBAccess"
 
     # Trust policy for local execution (user assumes role)
     TRUST_POLICY=$(cat <<EOF
@@ -158,7 +158,7 @@ EOF
         aws iam create-role \
             --role-name "$ROLE_NAME" \
             --assume-role-policy-document "$TRUST_POLICY" \
-            --description "CaseForge application role for DynamoDB access" \
+            --description "Docket application role for DynamoDB access" \
             --region "$AWS_REGION" --output text --query 'Role.Arn'
         echo "Created role: $ROLE_NAME"
     fi
@@ -262,7 +262,7 @@ setup_gcp() {
         echo "Service account $SA_NAME already exists — skipping."
     else
         gcloud iam service-accounts create "$SA_NAME" \
-            --display-name="CaseForge Application" \
+            --display-name="Docket Application" \
             --quiet
         echo "Created service account: $SA_EMAIL"
     fi
@@ -284,7 +284,7 @@ setup_gcp() {
     fi
 
     # Install Firestore dependency
-    pip install "case-forge[firestore]" --quiet
+    pip install "docket[firestore]" --quiet
 
     # Write env file
     cat > .env <<EOF
@@ -302,7 +302,7 @@ EOF
 run_app() {
     echo ""
     echo "═══════════════════════════════════════════════════════════════"
-    echo "  Starting CaseForge..."
+    echo "  Starting Docket..."
     echo "  API:      http://localhost:8000"
     echo "  Frontend: http://localhost:3000 (open separately)"
     echo "═══════════════════════════════════════════════════════════════"
@@ -341,7 +341,7 @@ run_app() {
 main() {
     echo ""
     echo "╔═══════════════════════════════════════════════════════════════╗"
-    echo "║              CaseForge — Setup & Run                         ║"
+    echo "║              Docket — Setup & Run                         ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo ""
 

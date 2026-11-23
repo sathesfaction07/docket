@@ -14,7 +14,7 @@ logger = logging.getLogger("case_forge")
 
 
 class DynamoDBBackend(DatabaseBackend):
-    def __init__(self, table_name: str = "CaseForge", region: str = "us-east-1", **kwargs):
+    def __init__(self, table_name: str = "Docket", region: str = "us-east-1", **kwargs):
         self.dynamodb = boto3.resource("dynamodb", region_name=region)
         self.table = self.dynamodb.Table(table_name)
 

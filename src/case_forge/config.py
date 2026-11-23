@@ -6,7 +6,7 @@ class Settings(BaseSettings):
 
     database_backend: str = "dynamodb"  # "dynamodb" | "firestore"
     aws_region: str = "us-east-1"
-    dynamodb_table: str = "CaseForge"
+    dynamodb_table: str = "Docket"
     gcp_project: str = ""
     firestore_collection: str = "cases"
 

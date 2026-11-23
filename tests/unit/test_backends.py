@@ -37,12 +37,12 @@ def dynamodb_backend(monkeypatch):
 
     with moto.mock_aws():
         boto3.client("dynamodb", region_name="us-east-1").create_table(
-            TableName="CaseForge",
+            TableName="Docket",
             KeySchema=[{"AttributeName": "case_id", "KeyType": "HASH"}],
             AttributeDefinitions=[{"AttributeName": "case_id", "AttributeType": "S"}],
             BillingMode="PAY_PER_REQUEST",
         )
-        yield DynamoDBBackend(table_name="CaseForge", region="us-east-1")
+        yield DynamoDBBackend(table_name="Docket", region="us-east-1")
 
 
 @pytest.fixture(params=["memory", "dynamodb"])

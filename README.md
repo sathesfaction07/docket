@@ -1,4 +1,4 @@
-# CaseForge
+# Docket
 
 Case lifecycle management for compliance operations. Tracks products through investigation states, computes Trailing 4-Week GMS to flag high-value listings, enforces per-user ownership (admin vs user) with each request identified by its own bearer token, and keeps every open browser in sync: changes are pushed live, and concurrent edits are version-checked so none is silently lost. Storage switches at runtime between DynamoDB (AWS), Firestore (Google Cloud), and an in-memory backend that needs no cloud account.
 
@@ -47,7 +47,7 @@ Every transition is recorded: who, when, from what state to what state.
 
 ## Live Collaboration
 
-Several people work the same queue at once, so CaseForge treats concurrent use as the normal case rather than an edge case.
+Several people work the same queue at once, so Docket treats concurrent use as the normal case rather than an edge case.
 
 **Every change is pushed to every open browser.** The API publishes an event for each successful write. Browsers hold a Server-Sent Events stream (`GET /api/events`). An open list updates rows in place and briefly highlights them; an open case updates its status, notes and history without a reload. A toast says who did what ("bob moved SKU-003 NEW → IN_PROGRESS"), and the header shows who else is online.
 
@@ -92,13 +92,13 @@ The UI pins an edit to the version it **started** from, not the version on scree
 └───────────────────────┘  └───────────────────────┘  └──────────────┘
 ```
 
-CaseForge runs as **one API server** today. The design already allows more; see [Scaling to more than one server](#scaling-to-more-than-one-server).
+Docket runs as **one API server** today. The design already allows more; see [Scaling to more than one server](#scaling-to-more-than-one-server).
 
 ---
 
 ## Scaling to more than one server
 
-CaseForge is deliberately single-server today: one API process, one change feed. This section
+Docket is deliberately single-server today: one API process, one change feed. This section
 is the plan for when one server is not enough, so the move is a known piece of work rather
 than a redesign.
 
@@ -158,7 +158,7 @@ CF_DATABASE_BACKEND=dynamodb CF_ADMIN_USERS=alice \
   CF_API_TOKENS='tok-alice:alice,tok-bob:bob' uvicorn case_forge.api:app --port 8000
 
 # Firestore
-pip install "case-forge[firestore]"
+pip install "docket[firestore]"
 CF_DATABASE_BACKEND=firestore CF_GCP_PROJECT=my-project \
   CF_API_TOKENS='tok-alice:alice' uvicorn case_forge.api:app --port 8000
 ```
@@ -234,7 +234,7 @@ Firestore's transaction path is written to the same contract but needs the Fires
 |:--|:--|:--|
 | `CF_DATABASE_BACKEND` | `dynamodb` | `dynamodb`, `firestore`, or `memory` (no cloud; data lasts until the API stops) |
 | `CF_AWS_REGION` | `us-east-1` | DynamoDB region |
-| `CF_DYNAMODB_TABLE` | `CaseForge` | Table name |
+| `CF_DYNAMODB_TABLE` | `Docket` | Table name |
 | `CF_GCP_PROJECT` | (empty) | Firestore project ID |
 | `CF_ADMIN_USERS` | `admin` | Comma-separated users with full access |
 | `CF_API_TOKENS` | (empty) | Comma-separated `token:user` pairs; each request's user comes from its bearer token |
