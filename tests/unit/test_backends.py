@@ -139,3 +139,60 @@ def test_memory_backend_hands_out_copies():
     fetched.status = Status.CLOSED
     stored = backend.get_case(case.case_id)
     assert stored.notes == [] and stored.status == Status.NEW
+
+
+def _all_pages(backend, filters_kwargs, page_size):
+    pages, cursor = [], None
+    while True:
+        page = backend.list_cases(CaseFilters(page_size=page_size, cursor=cursor,
+                                              **filters_kwargs))
+        pages.append([c.product_id for c in page.items])
+        cursor = page.cursor
+        if cursor is None:
+            return pages
+        assert len(pages) < 50, "paging did not terminate"
+
+
+class TestDynamoDBPaging:
+    """DynamoDB's Limit counts items READ, before the filter. Pages used to come back short or
+    empty while matches remained, and stats read only the first 1 MB page."""
+
+    def test_selective_filters_still_fill_every_page_and_miss_nothing(self, dynamodb_backend):
+        for n in range(40):
+            category = "Rare" if n % 8 == 0 else "Common"
+            dynamodb_backend.create_case(make_case(product_id=f"P{n:02d}", category=category))
+
+        pages = _all_pages(dynamodb_backend, {"category": "Rare"}, page_size=2)
+        assert [len(p) for p in pages] == [2, 2, 1]
+        assert sorted(pid for page in pages for pid in page) == ["P00", "P08", "P16", "P24", "P32"]
+
+    def test_description_search_pages_the_same_way(self, dynamodb_backend):
+        for n in range(30):
+            text = "needle in here" if n % 6 == 0 else "hay"
+            dynamodb_backend.create_case(make_case(product_id=f"D{n:02d}", description=text))
+
+        pages = _all_pages(dynamodb_backend, {"description_contains": "NEEDLE"}, page_size=2)
+        assert [len(p) for p in pages] == [2, 2, 1]
+        assert len({pid for page in pages for pid in page}) == 5
+
+    def test_a_page_that_ends_the_table_has_no_cursor(self, dynamodb_backend):
+        for n in range(3):
+            dynamodb_backend.create_case(make_case(product_id=f"E{n}"))
+        page = dynamodb_backend.list_cases(CaseFilters(page_size=3))
+        assert len(page.items) == 3
+        assert page.cursor is None
+
+    def test_stats_read_every_page(self, dynamodb_backend, monkeypatch):
+        for n in range(7):
+            dynamodb_backend.create_case(make_case(product_id=f"S{n}",
+                                                   gms=GMS(shipped_units=100, unit_price=20)))
+        real_scan = dynamodb_backend.table.scan
+
+        class SmallPages:  # what a table larger than 1 MB looks like to a single scan call
+            def scan(self, **kwargs):
+                return real_scan(**{"Limit": 2, **kwargs})
+
+        monkeypatch.setattr(dynamodb_backend, "table", SmallPages())
+        stats = dynamodb_backend.get_stats()
+        assert stats.total_open == 7
+        assert stats.high_value_open == 7

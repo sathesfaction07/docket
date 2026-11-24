@@ -1,5 +1,6 @@
 import json
 import logging
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from decimal import Decimal
 
@@ -52,18 +53,30 @@ class DynamoDBBackend(DatabaseBackend):
         if filters.cursor:
             scan_kwargs["ExclusiveStartKey"] = json.loads(filters.cursor)
 
-        scan_kwargs["Limit"] = filters.page_size
-        response = self.table.scan(**scan_kwargs)
-
-        items = [self._from_dynamo(item) for item in response.get("Items", [])]
-        last_key = response.get("LastEvaluatedKey")
-        cursor = json.dumps(last_key) if last_key else None
-
-        if filters.description_contains:
-            term = filters.description_contains.lower()
-            items = [i for i in items if term in i.description.lower()]
-
-        return CasePage(items=items, cursor=cursor, total=response.get("Count", 0))
+        # DynamoDB applies Limit to the items it READS, before FilterExpression -- and the
+        # description match happens here, after that. So one scan call can return a short or
+        # empty page while matches remain. Keep reading until the page is full or the table
+        # is exhausted, and resume the next page right after the last case returned.
+        scan_kwargs["Limit"] = max(filters.page_size, 100)
+        term = filters.description_contains.lower() if filters.description_contains else ""
+        items: list[Case] = []
+        cursor = None
+        while True:
+            response = self.table.scan(**scan_kwargs)
+            page = response.get("Items", [])
+            more_in_table = "LastEvaluatedKey" in response
+            for position, raw in enumerate(page):
+                case = self._from_dynamo(raw)
+                if term and term not in case.description.lower():
+                    continue
+                items.append(case)
+                if len(items) == filters.page_size:
+                    if more_in_table or position < len(page) - 1:
+                        cursor = json.dumps({"case_id": case.case_id})
+                    return CasePage(items=items, cursor=cursor, total=len(items))
+            if not more_in_table:
+                return CasePage(items=items, cursor=None, total=len(items))
+            scan_kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
 
     def _conditional_set(self, case_id: str, fields: dict, expected_version: int) -> dict:
         """SET ``fields`` plus version+1, only if the item exists, is live, and is at
@@ -133,8 +146,9 @@ class DynamoDBBackend(DatabaseBackend):
         return BatchResult(created=created, errors=errors)
 
     def get_stats(self) -> DashboardStats:
-        response = self.table.scan(FilterExpression=Attr("is_deleted").eq(False))
-        items = response.get("Items", [])
+        # Every page: one scan call returns at most 1 MB, so a single call undercounts any
+        # table larger than that.
+        items = list(self._scan_all(FilterExpression=Attr("is_deleted").eq(False)))
 
         open_statuses = {"NEW", "IN_PROGRESS", "UNDER_REVIEW", "REOPENED"}
         today = datetime.now(UTC).strftime("%Y-%m-%d")
@@ -166,6 +180,16 @@ class DynamoDBBackend(DatabaseBackend):
             by_status=by_status,
             by_category=by_category,
         )
+
+    def _scan_all(self, **kwargs) -> Iterator[dict]:
+        """Yield items from every page of a scan."""
+        while True:
+            response = self.table.scan(**kwargs)
+            yield from response.get("Items", [])
+            last_key = response.get("LastEvaluatedKey")
+            if not last_key:
+                return
+            kwargs["ExclusiveStartKey"] = last_key
 
     def _to_dynamo(self, case: Case) -> dict:
         data = json.loads(case.model_dump_json())
