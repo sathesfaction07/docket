@@ -49,34 +49,28 @@ class DynamoDBBackend(DatabaseBackend):
             scan_kwargs["FilterExpression"] &= Attr("gms.is_high_value").eq(filters.is_high_value)
         if filters.product_id:
             scan_kwargs["FilterExpression"] &= Attr("product_id").contains(filters.product_id)
+        # ISO-8601 timestamps compare correctly as strings.
+        if filters.created_after:
+            scan_kwargs["FilterExpression"] &= Attr("created_at").gte(filters.created_after)
+        if filters.created_before:
+            scan_kwargs["FilterExpression"] &= Attr("created_at").lte(filters.created_before)
 
-        if filters.cursor:
-            scan_kwargs["ExclusiveStartKey"] = json.loads(filters.cursor)
-
-        # DynamoDB applies Limit to the items it READS, before FilterExpression -- and the
-        # description match happens here, after that. So one scan call can return a short or
-        # empty page while matches remain. Keep reading until the page is full or the table
-        # is exhausted, and resume the next page right after the last case returned.
-        scan_kwargs["Limit"] = max(filters.page_size, 100)
+        # A scan has no useful order and DynamoDB applies Limit before the filter, so read every
+        # match (all pages), then sort newest-first and page here -- the same strategy as the
+        # Firestore backend, so both return identical pages. At this tool's scale (thousands of
+        # cases) one full scan per request is cheap; beyond that, add a GSI keyed for listing.
         term = filters.description_contains.lower() if filters.description_contains else ""
-        items: list[Case] = []
-        cursor = None
-        while True:
-            response = self.table.scan(**scan_kwargs)
-            page = response.get("Items", [])
-            more_in_table = "LastEvaluatedKey" in response
-            for position, raw in enumerate(page):
-                case = self._from_dynamo(raw)
-                if term and term not in case.description.lower():
-                    continue
-                items.append(case)
-                if len(items) == filters.page_size:
-                    if more_in_table or position < len(page) - 1:
-                        cursor = json.dumps({"case_id": case.case_id})
-                    return CasePage(items=items, cursor=cursor, total=len(items))
-            if not more_in_table:
-                return CasePage(items=items, cursor=None, total=len(items))
-            scan_kwargs["ExclusiveStartKey"] = response["LastEvaluatedKey"]
+        matched = []
+        for raw in self._scan_all(**scan_kwargs):
+            case = self._from_dynamo(raw)
+            if not term or term in case.description.lower():
+                matched.append(case)
+        matched.sort(key=lambda c: c.created_at, reverse=True)
+        start = int(filters.cursor) if filters.cursor else 0
+        page = matched[start : start + filters.page_size]
+        end = start + len(page)
+        cursor = str(end) if end < len(matched) else None
+        return CasePage(items=page, cursor=cursor, total=len(matched))
 
     def _conditional_set(self, case_id: str, fields: dict, expected_version: int) -> dict:
         """SET ``fields`` plus version+1, only if the item exists, is live, and is at

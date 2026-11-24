@@ -222,7 +222,7 @@ pytest tests/ --cov=src
 | `test_events.py` | The feed: replay of exactly the missed events, resync on restart or eviction, backpressure, heartbeats, presence, cross-thread publishing |
 | `test_live_api.py` | Multi-user behaviour through HTTP: ETags and `If-Match`, deterministic races injected between read and write, real threaded contention with a control run, and the event each write announces |
 
-Firestore's transaction path is written to the same contract but needs the Firestore emulator to test; it is not covered here.
+Firestore runs the same contract against a real project when `CF_TEST_FIRESTORE_PROJECT` is set (each test uses a fresh collection and deletes it); CI has no Google credentials, so it skips them. The first real run found that every list query failed on a fresh database: the query sorted with `order_by(created_at)`, which Firestore only allows with a composite index per filter combination, and none were shipped. Listing now sends only equality filters to Firestore and sorts and pages in Python, so it works on any new database with nothing to deploy.
 
 **Found in the browser, not by the tests.** The first version of the edit form sent `If-Match` with the version on screen at save time. Because live updates keep the screen current, a change made while you were typing advanced that version, and the save went through over it. The unit tests could not see this because they have no live screen. It surfaced while driving two sessions against one case. The fix was to pin the version an edit started from, and that is now how the UI behaves.
 

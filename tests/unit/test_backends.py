@@ -2,8 +2,12 @@
 
 The in-memory backend runs as is. DynamoDB runs against moto, which evaluates condition
 expressions, so the conditional-write logic is exercised for real rather than mocked.
-Firestore needs the Firestore emulator and is not covered by this file.
+Firestore runs against a real project when CF_TEST_FIRESTORE_PROJECT is set, and is
+skipped otherwise (CI has no Google credentials).
 """
+
+import os
+import uuid
 
 import pytest
 
@@ -45,11 +49,29 @@ def dynamodb_backend(monkeypatch):
         yield DynamoDBBackend(table_name="Docket", region="us-east-1")
 
 
-@pytest.fixture(params=["memory", "dynamodb"])
+@pytest.fixture
+def firestore_backend():
+    """A real Firestore database, opt-in. Set CF_TEST_FIRESTORE_PROJECT to a project you own
+    (with a Native-mode Firestore database and application-default credentials) to run the
+    contract against it. Each test gets a fresh collection, deleted afterwards."""
+    project = os.environ.get("CF_TEST_FIRESTORE_PROJECT")
+    if not project:
+        pytest.skip("set CF_TEST_FIRESTORE_PROJECT to run against real Firestore")
+    pytest.importorskip("google.cloud.firestore")
+    from case_forge.database.firestore import FirestoreBackend
+
+    collection = f"docket_test_{uuid.uuid4().hex[:12]}"
+    backend = FirestoreBackend(project_id=project, collection_name=collection)
+    yield backend
+    for doc in backend.collection.stream():
+        doc.reference.delete()
+
+
+@pytest.fixture(params=["memory", "dynamodb", "firestore"])
 def backend(request):
     if request.param == "memory":
         return MemoryBackend()
-    return request.getfixturevalue("dynamodb_backend")
+    return request.getfixturevalue(f"{request.param}_backend")
 
 
 class TestConditionalWrites:
@@ -196,3 +218,46 @@ class TestDynamoDBPaging:
         stats = dynamodb_backend.get_stats()
         assert stats.total_open == 7
         assert stats.high_value_open == 7
+
+
+class TestListing:
+    """Listing behaves the same on every backend. On Firestore this needs no composite index:
+    the query used to add order_by(created_at), which fails on a fresh database."""
+
+    def seed(self, backend):
+        rows = [("L1", "Toys", "NEW", "2026-01-01"), ("L2", "Toys", "IN_PROGRESS", "2026-01-02"),
+                ("L3", "Books", "NEW", "2026-01-03"), ("L4", "Toys", "NEW", "2026-01-04"),
+                ("L5", "Toys", "CLOSED", "2026-01-05")]
+        for pid, cat, status, day in rows:
+            backend.create_case(make_case(product_id=pid, category=cat, status=Status(status),
+                                          created_at=f"{day}T10:00:00+00:00"))
+
+    def test_an_unfiltered_list_is_newest_first(self, backend):
+        self.seed(backend)
+        page = backend.list_cases(CaseFilters(page_size=10))
+        assert [c.product_id for c in page.items] == ["L5", "L4", "L3", "L2", "L1"]
+
+    def test_filters_combine(self, backend):
+        self.seed(backend)
+        page = backend.list_cases(CaseFilters(category="Toys", status=[Status.NEW,
+                                                                       Status.IN_PROGRESS]))
+        assert sorted(c.product_id for c in page.items) == ["L1", "L2", "L4"]
+
+    def test_cursor_paging_returns_everything_once(self, backend):
+        self.seed(backend)
+        seen, cursor = [], None
+        for _ in range(10):
+            page = backend.list_cases(CaseFilters(page_size=2, cursor=cursor))
+            seen += [c.product_id for c in page.items]
+            cursor = page.cursor
+            if cursor is None:
+                break
+        assert sorted(seen) == ["L1", "L2", "L3", "L4", "L5"]
+
+    def test_date_range_filters_are_honoured(self, backend):
+        """The API accepts created_after/created_before; DynamoDB and Firestore used to
+        ignore both silently and return every case."""
+        self.seed(backend)
+        page = backend.list_cases(CaseFilters(created_after="2026-01-02",
+                                              created_before="2026-01-04T23:59:59+00:00"))
+        assert sorted(c.product_id for c in page.items) == ["L2", "L3", "L4"]

@@ -87,7 +87,7 @@ Docket is a case lifecycle management system for compliance operations. It track
 │   AWS DynamoDB               │   │   Google Firestore           │
 │   Table: Docket           │   │   Collection: cases          │
 │   PK: case_id                │   │   Doc ID: case_id            │
-│   Scan + FilterExpression    │   │   Composite indexes          │
+│   Scan + FilterExpression    │   │   Equality filters, no index │
 │   No GSIs implemented        │   │   Writes in a transaction    │
 └─────────────────────────────┘   └─────────────────────────────┘
 ```
@@ -194,7 +194,7 @@ Admin list comes from `settings.admin_users` (comma-separated string, default `"
 | Backend | Key Design | Consistency | Query Strategy | When to Use |
 |:--|:--|:--|:--|:--|
 | DynamoDB | Scan-based (no GSIs implemented). FilterExpression on every list_cases(). PK = case_id only. | Eventual (default) | Scan entire table + filter in request. Client-side description/product_id substring match. | AWS-native deployments. <10K cases. Serverless Lambda + DynamoDB combo. |
-| Firestore | Document model. Composite indexes for common filters (status, assignee, category). where() + order_by() chaining. | Strong by default | Indexed queries for structured fields. Client-side partial string match. | Google Cloud deployments. `on_snapshot()` listeners are a natural shared feed for multi-instance live sync. Multi-region replication out-of-box. |
+| Firestore | Document model. Equality and `in` filters only, served by automatic single-field indexes; sorting and paging in Python, so no composite index is needed. | Strong by default | Indexed queries for structured fields. Client-side partial string match. | Google Cloud deployments. `on_snapshot()` listeners are a natural shared feed for multi-instance live sync. Multi-region replication out-of-box. |
 | Memory | Dict behind a lock. | Strong (single process) | Python filtering and sorting. | Demos, local development, tests. Data lasts until the process stops. |
 
 ---
@@ -322,9 +322,7 @@ DynamoDB backend uses **case_id as partition key only** — no sort key, no GSIs
   - GSI-3: PK=category#is_high_value, SK=created_at (query high-value cases in category)
 - Query by status + assignee + category: impossible efficiently — must scan. Combining 3 filters (status, assignee, category) means you'd ideally use a composite key, but DynamoDB limits you to 2 key attributes per index. Solution: use Firestore (supports composite indexes with arbitrary field combinations) or accept scan latency.
 
-Firestore backend has no explicit key design — doc ID is case_id. Queries use **composite indexes** (configured in `firestore.indexes.json` or auto-created):
-- where("assignee", "==", X).where("status", "in", [Y, Z]).order_by("created_at")
-- where("category", "==", X).where("gms.is_high_value", "==", True)
+Firestore backend has no explicit key design — doc ID is case_id. Queries send **only equality and `in` filters** (`is_deleted`, `assignee`, `category`, `status in`, `gms.is_high_value`), which Firestore serves from its automatic single-field indexes in any combination. Sorting by `created_at` and paging happen in Python. The earlier version added `order_by("created_at")` to the query; Firestore requires a composite index for every filter combination with that, none were shipped, and on a fresh database every list failed, even the unfiltered one. Reading all matches per page is fine at this tool's scale; at much larger scale, deploy composite indexes and move `order_by`/`limit` back into the query. DynamoDB lists the same way (full scan, sort, page), so both cloud backends return identical pages.
 
 Both backends filter `is_deleted=False` on every query — soft-deleted cases are invisible but retained for audit.
 
@@ -462,14 +460,14 @@ Tests cover:
 - **test_models.py**: GMS computation (boundary at $1000, all 7 components, zero values), status transition validation (NEW→IN_PROGRESS allowed, NEW→RESOLVED denied, CLOSED→* denied)
 - **test_auth.py**: Admin detection, can_modify/can_delete ownership checks (admin bypasses, non-admin restricted to own cases)
 
-No integration tests (would need local DynamoDB or Firestore emulator), no API tests (would need `TestClient` from FastAPI). See Known Gaps.
+Storage contract tests run against the in-memory backend, DynamoDB (via moto), and real Firestore when `CF_TEST_FIRESTORE_PROJECT` is set. API tests run through FastAPI's `TestClient`.
 
 ---
 
 ## Known Gaps
 
 1. **Two ADRs, not full coverage**: `docs/adr/` now records the storage abstraction (ADR-001) and the form-control CSS decision (ADR-002). Still unrecorded: soft delete vs hard delete, and the choice to ship without GSIs.
-2. **No Firestore tests**: API tests run through `TestClient`, and the DynamoDB backend runs against moto, but the Firestore transaction path needs the Firestore emulator and is untested.
+2. **Firestore tests need credentials**: the contract runs against a real Firestore project when `CF_TEST_FIRESTORE_PROJECT` is set, and passed there; CI has no Google credentials, so it skips them.
 3. **No GSIs on DynamoDB**: Current implementation scans entire table on every list_cases(). GSIs for assignee, status, category would reduce query time from O(n) to O(log n).
 4. **Live sync is single-process**: the change feed lives in the API process, so with several instances each client sees only its own instance's writes. Version checks are unaffected because the database enforces them. See Concurrency and Live Sync for the shared-feed options.
 5. **No pagination UI**: Backend returns cursor, frontend ignores it. List view shows first 50 cases only.

@@ -30,44 +30,30 @@ class FirestoreBackend(DatabaseBackend):
         return Case(**data)
 
     def list_cases(self, filters: CaseFilters) -> CasePage:
+        # Only equality / `in` filters go to Firestore: it serves any combination of those from
+        # its automatic single-field indexes. Adding order_by(created_at) to a filtered query
+        # needs a composite index per filter combination -- none ship, so on a fresh database
+        # every list failed, even the unfiltered one (is_deleted == False + order_by). Sorting
+        # and paging happen here instead, which reads every matching case per page: fine at
+        # this tool's scale (thousands of cases); beyond that, deploy composite indexes and
+        # push order_by/limit back into the query.
         query = self.collection.where("is_deleted", "==", False)
-
         if filters.assignee:
             query = query.where("assignee", "==", filters.assignee)
         if filters.category:
             query = query.where("category", "==", filters.category)
         if filters.status:
-            status_values = [s.value for s in filters.status]
-            query = query.where("status", "in", status_values)
+            query = query.where("status", "in", [s.value for s in filters.status])
         if filters.is_high_value is not None:
             query = query.where("gms.is_high_value", "==", filters.is_high_value)
 
-        query = query.order_by("created_at", direction="DESCENDING")
-        query = query.limit(filters.page_size)
-
-        if filters.cursor:
-            cursor_doc = self.collection.document(filters.cursor).get()
-            if cursor_doc.exists:
-                query = query.start_after(cursor_doc)
-
-        docs = list(query.stream())
-        items = []
-        for doc in docs:
-            data = doc.to_dict()
-            case = Case(**data)
-            if filters.product_id and filters.product_id.lower() not in case.product_id.lower():
-                continue
-            if (
-                filters.description_contains
-                and filters.description_contains.lower() not in case.description.lower()
-            ):
-                continue
-            if filters.marketplace and filters.marketplace not in case.marketplace:
-                continue
-            items.append(case)
-
-        cursor = docs[-1].id if len(docs) == filters.page_size else None
-        return CasePage(items=items, cursor=cursor, total=len(items))
+        matched = [case for doc in query.stream() if _keep(case := Case(**doc.to_dict()), filters)]
+        matched.sort(key=lambda c: c.created_at, reverse=True)
+        start = int(filters.cursor) if filters.cursor else 0
+        page = matched[start : start + filters.page_size]
+        end = start + len(page)
+        cursor = str(end) if end < len(matched) else None
+        return CasePage(items=page, cursor=cursor, total=len(matched))
 
     def _conditional_update(self, case_id: str, fields: dict, expected_version: int) -> dict:
         """Read-check-write inside a Firestore transaction. Firestore retries the transaction
@@ -163,3 +149,19 @@ class FirestoreBackend(DatabaseBackend):
             by_status=by_status,
             by_category=by_category,
         )
+
+
+def _keep(case: Case, filters: CaseFilters) -> bool:
+    """The filters Firestore cannot apply from single-field indexes."""
+    if filters.product_id and filters.product_id.lower() not in case.product_id.lower():
+        return False
+    if (
+        filters.description_contains
+        and filters.description_contains.lower() not in case.description.lower()
+    ):
+        return False
+    if filters.marketplace and filters.marketplace not in case.marketplace:
+        return False
+    if filters.created_after and case.created_at < filters.created_after:
+        return False
+    return not (filters.created_before and case.created_at > filters.created_before)
