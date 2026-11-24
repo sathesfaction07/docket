@@ -64,5 +64,5 @@ Opaque hex values are used rather than translucent ones. Card surfaces still use
 
 **Neutral**
 
-- This is treated as a standing rule for every UI in the portfolio, not a one-off patch. The bug is a property of Tailwind-via-CDN plus form controls, not of this project
+- This is treated as a standing rule for every UI in these projects, not a one-off patch. The bug is a property of Tailwind-via-CDN plus form controls, not of this project
 - The proper fix is a real Tailwind build step with a form plugin, which would remove both the runtime-generation problem and the need for `!important`. That is a deliberate deferral: a build step costs the "open the file and it runs" property, which is worth more here than stylistic purity
