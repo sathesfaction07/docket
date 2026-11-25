@@ -2,6 +2,8 @@
 
 Case lifecycle management for compliance operations. Tracks products through investigation states, computes Trailing 4-Week GMS to flag high-value listings, enforces per-user ownership (admin vs user) with each request identified by its own bearer token, and keeps every open browser in sync: changes are pushed live, and concurrent edits are version-checked so none is silently lost. Storage switches at runtime between DynamoDB (AWS), Firestore (Google Cloud), and an in-memory backend that needs no cloud account.
 
+**Engagement readout:** [ENGAGEMENT.md](ENGAGEMENT.md) describes how this would be scoped, proven and rolled out for a customer, including what is not yet measured.
+
 ---
 
 ## The Problem
